@@ -144,9 +144,52 @@ Notify::push()->registerDevice(
 ```php
 $status = Notify::message($messageId);
 
-$status->status;      // "queued" | "sent" | "delivered" | "failed" | ...
+$status->status;      // "moderation" | "queued" | "sent" | "delivered" | "failed" | "rejected" | ...
 $status->deliveredAt;
 ```
+
+### Moderation of free-text messages
+
+A message sent with a template (`templateId`) goes out immediately. Plain text is checked against the platform's system templates and your company's own templates; if it matches one (the `{{variables}}` may hold any value) it goes out immediately too. Text matching **no** template is held until a Notify moderator approves it:
+
+```php
+$response = Notify::sms()->send(to: $phone, message: 'Summer sale -50%!');
+
+$response->isHeldForModeration(); // status "moderation" - already charged, not yet sent
+```
+
+It then moves on to `queued` (approved) or `rejected` (refused and refunded; a `message.rejected` webhook is sent) - `Notify::message($id)->isRejected()`. For time-sensitive text, especially one-time codes, use a template or the OTP API below.
+
+## One-time codes (OTP)
+
+The platform generates, delivers and verifies the code - your app never stores it. Code length, validity and allowed attempts come from your company's OTP settings in the Notify cabinet, or the platform defaults when you have not set your own. OTP messages are billed like normal messages and never held for moderation.
+
+```php
+use CloudMe\Notify\Exceptions\RateLimitException;
+use CloudMe\NotifyLaravel\Facades\Notify;
+
+// Send
+try {
+    $otp = Notify::otp()->send(to: $request->phone); // channel: 'sms' (default), 'telegram', 'whatsapp', 'email'
+} catch (RateLimitException $e) {
+    return back()->withErrors(['phone' => "Try again in {$e->retryAfterSeconds} seconds."]); // OTP_RESEND_TOO_SOON
+}
+
+session(['otp_id' => $otp->otpId]); // $otp->expiresIn, $otp->codeLength, $otp->maxAttempts
+
+// Verify
+$result = Notify::otp()->verify(session('otp_id'), $request->code);
+
+if ($result->verified) {
+    // phone confirmed
+} elseif ($result->canRetry()) {
+    // wrong code - $result->attemptsLeft left
+} else {
+    // expired / attempts used up / already used ($result->errorCode) - send a new code
+}
+```
+
+A wrong, expired or used-up code is returned as a result, not thrown. `send()` and `verify()` are never retried automatically (a retry could deliver a second code or count twice). In the sandbox, `$otp->code` holds the generated code so you can test the verify step.
 
 ## Balance
 
@@ -270,7 +313,7 @@ try {
 }
 ```
 
-Also available: `AuthenticationException`, `ForbiddenException`, `NotFoundException`, `ServerException`, `NetworkException`, `ApiException` (fallback), and `ConfigurationException` (a purely local problem - bad/missing config, invalid private key - thrown before any request is even attempted).
+`ForbiddenException` also covers an API client switched off because it exceeds your plan's API key limit (`CLIENT_REVOKED`). Also available: `AuthenticationException`, `ForbiddenException`, `NotFoundException`, `ServerException`, `NetworkException`, `ApiException` (fallback), and `ConfigurationException` (a purely local problem - bad/missing config, invalid private key - thrown before any request is even attempted).
 
 ## Sandbox
 

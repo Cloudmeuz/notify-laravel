@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static \CloudMe\Notify\Responses\MessageStatusResponse message(string $messageId)
  * @method static \CloudMe\Notify\Responses\BalanceResponse balance()
  * @method static \CloudMe\Notify\Reports\ReportsClient reports()
+ * @method static \CloudMe\Notify\Otp\OtpClient otp()
  *
  * @see NotifyClient
  */
