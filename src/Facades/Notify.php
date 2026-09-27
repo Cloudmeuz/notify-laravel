@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static \CloudMe\Notify\Responses\BalanceResponse balance()
  * @method static \CloudMe\Notify\Reports\ReportsClient reports()
  * @method static \CloudMe\Notify\Otp\OtpClient otp()
+ * @method static \CloudMe\Notify\Debts\DebtsClient debts()
  *
  * @see NotifyClient
  */

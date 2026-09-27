@@ -8,8 +8,10 @@ use CloudMe\Notify\Auth\ArrayTokenStorage;
 use CloudMe\Notify\Auth\TokenStorage;
 use CloudMe\Notify\Exceptions\ConfigurationException;
 use CloudMe\Notify\NotifyClient;
+use CloudMe\Notify\Webhooks\WebhookVerifier;
 use CloudMe\NotifyLaravel\Cache\LaravelTokenStorage;
 use CloudMe\NotifyLaravel\Console\Commands\NotifyDoctorCommand;
+use CloudMe\NotifyLaravel\Http\Middleware\VerifyNotifyWebhook;
 use CloudMe\NotifyLaravel\Support\ClientConfig;
 use Illuminate\Cache\CacheManager;
 use Illuminate\Contracts\Foundation\Application;
@@ -26,10 +28,21 @@ final class NotifyServiceProvider extends ServiceProvider
         });
 
         $this->app->alias(NotifyClient::class, 'notify');
+
+        $this->app->singleton(WebhookVerifier::class, function (Application $app): WebhookVerifier {
+            $webhook = (array) $app->make('config')->get('notify.webhook', []);
+
+            return new WebhookVerifier(
+                (string) ($webhook['secret'] ?? ''),
+                (int) ($webhook['tolerance'] ?? WebhookVerifier::DEFAULT_TOLERANCE_SECONDS),
+            );
+        });
     }
 
     public function boot(): void
     {
+        $this->app->make('router')->aliasMiddleware('notify.webhook', VerifyNotifyWebhook::class);
+
         if (! $this->app->runningInConsole()) {
             return;
         }
@@ -48,7 +61,7 @@ final class NotifyServiceProvider extends ServiceProvider
      */
     public function provides(): array
     {
-        return [NotifyClient::class, 'notify'];
+        return [NotifyClient::class, 'notify', WebhookVerifier::class];
     }
 
     private function buildClient(Application $app): NotifyClient

@@ -6,11 +6,13 @@ use CloudMe\Notify\Exceptions\InsufficientBalanceException;
 use CloudMe\Notify\NotifyClient;
 use CloudMe\NotifyLaravel\Exceptions\UnroutableNotifiableException;
 use CloudMe\NotifyLaravel\Notifications\NotifyChannel;
+use CloudMe\NotifyLaravel\Notifications\NotifyMessage;
 use CloudMe\NotifyLaravel\Tests\Stubs\ChannelNotification;
 use CloudMe\NotifyLaravel\Tests\Stubs\ExplicitRecipientNotification;
 use CloudMe\NotifyLaravel\Tests\Stubs\NotifiableStub;
 use CloudMe\NotifyLaravel\Tests\Stubs\QueuedNotification;
 use CloudMe\NotifyLaravel\Tests\Stubs\UnroutableNotifiableStub;
+use Illuminate\Notifications\Notification;
 
 function sendResponseBody(string $environment = 'sandbox'): array
 {
@@ -115,4 +117,30 @@ it('works as a queued notification end to end through the container', function (
 
     expect($history)->toHaveCount(2)
         ->and((string) $history[1]['request']->getUri())->toContain('messages/sms');
+});
+
+it('sends a photo url set with NotifyMessage::photo()', function () {
+    $history = [];
+    $client = mockedNotifyClient([
+        jsonResponse(200, tokenResponseBody()),
+        jsonResponse(200, sendResponseBody()),
+    ], $history);
+
+    $notification = new class extends Notification
+    {
+        public function toNotify(mixed $notifiable): NotifyMessage
+        {
+            return NotifyMessage::make()
+                ->channel('telegram')
+                ->message('<b>Buyurtmangiz tayyor</b>')
+                ->photo('https://example.com/order.jpg');
+        }
+    };
+
+    (new NotifyChannel($client))->send(new NotifiableStub, $notification);
+
+    $body = json_decode((string) $history[1]['request']->getBody(), true);
+
+    expect($body['photo_url'])->toBe('https://example.com/order.jpg')
+        ->and($body['message'])->toBe('<b>Buyurtmangiz tayyor</b>');
 });

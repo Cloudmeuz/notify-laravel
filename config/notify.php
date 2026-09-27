@@ -91,6 +91,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Incoming webhooks
+    |--------------------------------------------------------------------------
+    |
+    | The signing secret of this API client's webhook (dashboard -> API
+    | clients -> Webhook). Used by the "notify.webhook" route middleware to
+    | verify every incoming webhook; requests signed more than `tolerance`
+    | seconds ago are rejected as replays.
+    |
+    */
+
+    'webhook' => [
+        'secret' => env('NOTIFY_WEBHOOK_SECRET'),
+        'tolerance' => (int) env('NOTIFY_WEBHOOK_TOLERANCE', 300),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | HTTP behaviour
     |--------------------------------------------------------------------------
     */

@@ -35,6 +35,7 @@ NOTIFY_API_KEY=nk_test_xxxxxxxxxxxxxxxxxxxxxxxx
 NOTIFY_PRIVATE_KEY_PATH=/secure/path/notify-sandbox.pem
 NOTIFY_TOKEN_STORE=cache
 NOTIFY_CACHE_STORE=redis
+NOTIFY_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx   # only if you receive webhooks
 ```
 
 Switching to production later is just:
@@ -82,13 +83,25 @@ Notify::sms()->send(to: '+998901234567', message: 'Buyurtmangiz tayyor');
 
 ```php
 Notify::telegram()->send(to: '123456789', message: 'Buyurtmangiz tayyor');
+
+// HTML formatting (<b>, <i>, <u>, <a href>) and a photo - the text becomes its caption
+Notify::telegram()->send(
+    to: '+998901234567',
+    message: "<b>Xizmat ko'rsatish boshlandi</b>\nModel: DAF XF106",
+    photoUrl: 'https://example.com/photos/truck-1855.jpg',
+);
 ```
 
 ### WhatsApp
 
 ```php
 Notify::whatsapp()->send(to: '+998901234567', message: 'Buyurtmangiz tayyor');
+
+// WhatsApp does not render HTML - use *bold*, _italic_, ~strike~
+Notify::whatsapp()->send(to: '+998901234567', message: '*Buyurtmangiz tayyor*', photoUrl: 'https://example.com/order.jpg');
 ```
+
+`photoUrl` must be a public JPEG/PNG URL. With a WhatsApp template, it fills the template's IMAGE header (the template must be approved with one).
 
 ### Email
 
@@ -191,6 +204,69 @@ if ($result->verified) {
 
 A wrong, expired or used-up code is returned as a result, not thrown. `send()` and `verify()` are never retried automatically (a retry could deliver a second code or count twice). In the sandbox, `$otp->code` holds the generated code so you can test the verify step.
 
+## Debt collection
+
+Hand a debt over and Notify reminds the debtor channel by channel following a collection strategy (e.g. Telegram on day 1 after the due date, SMS on day 2, then WhatsApp and a voice call) until you report it paid. Requires the `debts:manage` scope on your API client.
+
+```php
+$debt = Notify::debts()->create(
+    name: $customer->name,
+    phone: $customer->phone,
+    amount: $invoice->total,
+    dueDate: $invoice->due_date,        // Carbon / DateTimeInterface / 'Y-m-d'
+    externalId: "INV-{$invoice->id}",   // makes create() idempotent
+    // strategyId: '...',               // dashboard -> Collection -> Strategies -> API ID
+);
+
+$invoice->update(['notify_debt_id' => $debt->id]);
+
+// When the customer pays (partial payments keep the reminders going for the rest):
+$result = Notify::debts()->recordPayment($invoice->notify_debt_id, $payment->amount, externalId: "PAY-{$payment->id}");
+
+$result->debt->isPaid();             // true -> reminders stop
+$result->payment->attributedChannel; // e.g. "sms" - the reminder that got them to pay
+$result->payment->daysLate;          // 2 (negative = early)
+
+Notify::debts()->find($debtId);      // with ->payments
+Notify::debts()->cancel($debtId);    // stop collecting
+```
+
+`recordPayment()` throws `ValidationException` with `errorCode` `EXCEEDS_REMAINING`, `DEBT_CLOSED` or `INVALID_AMOUNT`.
+
+## Receiving webhooks
+
+Register a webhook for your API client in the dashboard (API clients -> Webhook) and put its signing secret in `.env`:
+
+```env
+NOTIFY_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+Protect the route with the `notify.webhook` middleware - it verifies `X-Signature` (HMAC-SHA256 of `"{X-Webhook-Timestamp}.{raw body}"`), rejects replays older than 5 minutes (`NOTIFY_WEBHOOK_TOLERANCE`) and responds `401` otherwise:
+
+```php
+// routes/web.php - also exclude the path from CSRF verification
+Route::post('/webhooks/notify', NotifyWebhookController::class)->middleware('notify.webhook');
+```
+
+```php
+use CloudMe\NotifyLaravel\Http\Middleware\VerifyNotifyWebhook;
+
+class NotifyWebhookController
+{
+    public function __invoke(Request $request)
+    {
+        $event = VerifyNotifyWebhook::event($request); // CloudMe\Notify\Webhooks\WebhookEvent
+
+        // A retried delivery carries the same $event->id - skip ones you already handled.
+        if ($event->event === 'message.failed') {
+            Message::where('notify_id', $event->messageId)->update(['error' => $event->errorCode]);
+        }
+
+        return response()->noContent();
+    }
+}
+```
+
 ## Balance
 
 ```php
@@ -260,6 +336,15 @@ $user->notify(new OrderReady($order));
 3. If neither is available, `CloudMe\NotifyLaravel\Exceptions\UnroutableNotifiableException` is thrown.
 
 There is deliberately no third fallback that guesses a conventional property (`->phone`, `->email`, `->telegram_chat_id`, ...) - which one is actually correct depends on the channel you're sending on (a `whatsapp` send needs a phone, a `push` send also needs a phone but registered as a device, `telegram` needs a chat id), and a silently wrong guess is worse than the explicit exception above. If you send more than one channel to the same notifiable, either set `->to()` per notification or make `routeNotificationForNotify()` inspect `$notification` and branch.
+
+### Photos in a Notification
+
+```php
+return NotifyMessage::make()
+    ->channel('telegram')
+    ->message('<b>Buyurtmangiz tayyor</b>')
+    ->photo('https://example.com/order.jpg');
+```
 
 ### Templates and idempotency in a Notification
 

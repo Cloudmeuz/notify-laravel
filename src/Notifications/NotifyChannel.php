@@ -73,6 +73,7 @@ final class NotifyChannel
             smsType: $message->getSmsType(),
             subject: $message->getSubject(),
             idempotencyKey: $message->getIdempotencyKey(),
+            photoUrl: $message->getPhotoUrl(),
         );
     }
 
