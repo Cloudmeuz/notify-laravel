@@ -3,9 +3,28 @@
 declare(strict_types=1);
 
 use CloudMe\Notify\Channels\ChannelSender;
+use CloudMe\Notify\Exceptions\InsufficientBalanceException;
 use CloudMe\Notify\NotifyClient;
 use CloudMe\Notify\Responses\SendMessageResponse;
 use CloudMe\NotifyLaravel\Facades\Notify;
+
+it('preserves spending limit errors through the facade without retrying', function () {
+    $history = [];
+    $client = mockedNotifyClient([
+        jsonResponse(200, tokenResponseBody()),
+        jsonResponse(402, ['success' => false, 'error' => ['code' => 'SPENDING_LIMIT_EXCEEDED', 'message' => 'Spending limit exceeded.']]),
+    ], $history);
+    $this->app->instance(NotifyClient::class, $client);
+
+    try {
+        Notify::sms()->send(to: '+998901234567', message: 'Salom');
+        $this->fail('Expected a payment error.');
+    } catch (InsufficientBalanceException $exception) {
+        expect($exception->errorCode)->toBe('SPENDING_LIMIT_EXCEEDED');
+        expect($exception->statusCode)->toBe(402);
+    }
+    expect($history)->toHaveCount(2);
+});
 
 it('proxies to the NotifyClient bound in the container', function () {
     expect(Notify::getFacadeRoot())->toBe($this->app->make(NotifyClient::class));

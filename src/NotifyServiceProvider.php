@@ -82,6 +82,7 @@ final class NotifyServiceProvider extends ServiceProvider
                 'connect_timeout' => (float) ($http['connect_timeout'] ?? 5),
                 'max_retries' => (int) ($http['max_retries'] ?? 3),
             ],
+            locale: isset($config['locale']) && $config['locale'] !== '' ? (string) $config['locale'] : null,
         );
     }
 

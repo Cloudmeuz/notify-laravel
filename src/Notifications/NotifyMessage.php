@@ -39,6 +39,8 @@ final class NotifyMessage
 
     private ?string $photoUrl = null;
 
+    private ?int $channelAccountId = null;
+
     public static function make(): self
     {
         return new self;
@@ -136,6 +138,18 @@ final class NotifyMessage
         $this->idempotencyKey = $idempotencyKey;
 
         return $this;
+    }
+
+    public function channelAccount(int $channelAccountId): self
+    {
+        $this->channelAccountId = $channelAccountId;
+
+        return $this;
+    }
+
+    public function getChannelAccountId(): ?int
+    {
+        return $this->channelAccountId;
     }
 
     public function getChannel(): ?string

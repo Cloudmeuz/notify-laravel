@@ -31,6 +31,20 @@ it('resolves NotifyClient through the "notify" alias', function () {
     expect($this->app->make('notify'))->toBe($this->app->make(NotifyClient::class));
 });
 
+it('sends the configured locale as Accept-Language, and none by default', function (?string $locale, ?string $header) {
+    config(['notify.locale' => $locale]);
+
+    $client = $this->app->make(NotifyClient::class);
+    $http = (fn () => $this->http)->call($client);
+    $guzzle = (fn () => $this->client)->call($http);
+
+    expect($guzzle->getConfig('headers')['Accept-Language'] ?? null)->toBe($header);
+})->with([
+    'configured' => ['ru', 'ru'],
+    'empty' => ['', null],
+    'missing' => [null, null],
+]);
+
 it('registers the notify:doctor command', function () {
     expect(Artisan::all())->toHaveKey('notify:doctor');
 });

@@ -74,6 +74,7 @@ final class NotifyChannel
             subject: $message->getSubject(),
             idempotencyKey: $message->getIdempotencyKey(),
             photoUrl: $message->getPhotoUrl(),
+            channelAccountId: $message->getChannelAccountId(),
         );
     }
 

@@ -36,6 +36,7 @@ NOTIFY_PRIVATE_KEY_PATH=/secure/path/notify-sandbox.pem
 NOTIFY_TOKEN_STORE=cache
 NOTIFY_CACHE_STORE=redis
 NOTIFY_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx   # only if you receive webhooks
+NOTIFY_LOCALE=ru   # optional - language of error messages and hints: uz (default), uz-Cyrl, ru, en
 ```
 
 Switching to production later is just:
@@ -92,6 +93,18 @@ Notify::telegram()->send(
 );
 ```
 
+Telegram cannot message a phone number until its owner has opened your bot once. Get a link and send it to the customer first (by SMS, email or in your app):
+
+```php
+$binding = Notify::telegram()->bindingLink('+998901234567');
+
+if (! $binding->bound) {
+    Notify::sms()->send(to: '+998901234567', message: "Telegram orqali xabar olish uchun: {$binding->link}");
+}
+```
+
+The same phone gets the same link again for 7 days; `bound` is `true` once they opened it. Pass `channelAccountId:` for one of your own bots.
+
 ### WhatsApp
 
 ```php
@@ -139,6 +152,15 @@ Notify::sms()->send(
     templateId: 42,
     variables: ['name' => 'Aziz', 'order_id' => '10293'],
 );
+```
+
+List the templates you can use (system ones plus your company's approved ones, for the channels your API client may send on):
+
+```php
+foreach (Notify::templates()->list('sms') as $template) {
+    $template->id;        // pass as templateId
+    $template->variables; // ['name', 'order_id'] - send a value for each
+}
 ```
 
 ## Push Device Registration
@@ -398,6 +420,8 @@ try {
 }
 ```
 
+Every exception also has `$e->hint()` (what to do next) and `$e->docsUrl()` (that error in the dashboard API docs), in the language set by `NOTIFY_LOCALE`; a missing scope is in `$e->requiredScope()`, missing template variables in `$e->missingVariables()`.
+
 `ForbiddenException` also covers an API client switched off because it exceeds your plan's API key limit (`CLIENT_REVOKED`). Also available: `AuthenticationException`, `ForbiddenException`, `NotFoundException`, `ServerException`, `NetworkException`, `ApiException` (fallback), and `ConfigurationException` (a purely local problem - bad/missing config, invalid private key - thrown before any request is even attempted).
 
 ## Sandbox
@@ -440,3 +464,23 @@ Checks (never sends a real message, never prints a secret):
 ## Documentation
 
 Full API reference (OpenAPI spec, request/response fields, error codes): <https://docs.notify.cloudme.uz>
+
+
+### Company spending limits
+
+`INSUFFICIENT_BALANCE`: insufficient wallet funds. `SPENDING_LIMIT_EXCEEDED`: a company daily or monthly message spending cap would be exceeded (HTTP 402). Sandbox is exempt. Gross message debits count toward calendar limits; refunds do not reset the allowance. Change limits in the company balance panel or wait for the next period.
+The updated PHP SDK exposes `CloudMe\Notify\Exceptions\SpendingLimitExceededException`, a subclass of `InsufficientBalanceException`. Existing integrations can inspect `$exception->errorCode === "SPENDING_LIMIT_EXCEEDED"`; the Laravel facade preserves this code. These 402 errors are not retried automatically.
+
+## Sender profiles (since 1.3)
+
+Choose the company Telegram bot or Firebase project by its Channels profile ID. Omit the ID to use the current default. Register FCM tokens with the same project ID used for sending (one token per company/project/phone). Each Telegram bot needs its own recipient binding.
+
+```php
+$notify->telegram()->send(to: "998901234567", message: "Hello", channelAccountId: 7);
+$notify->push()->registerDevice("998901234567", $fcmToken, channelAccountId: 12);
+$notify->push()->send(to: "998901234567", message: "Hello", channelAccountId: 12);
+```
+
+Responses expose `channelAccountId` (nullable). Requires the API with channel-account support.
+
+Laravel Notifications: `NotifyMessage::make()->channel("telegram")->channelAccount(7)->message("Hello")`. Requires `cloudme/notify-php:^1.3`.

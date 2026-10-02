@@ -108,6 +108,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Language of API error messages
+    |--------------------------------------------------------------------------
+    |
+    | Sent as Accept-Language on every request, so the API's error.message
+    | and error.hint (NotifyException::getMessage() / hint()) come back in
+    | this language: "uz", "uz-Cyrl", "ru" or "en". Leave empty for Uzbek.
+    |
+    */
+
+    'locale' => env('NOTIFY_LOCALE'),
+
+    /*
+    |--------------------------------------------------------------------------
     | HTTP behaviour
     |--------------------------------------------------------------------------
     */

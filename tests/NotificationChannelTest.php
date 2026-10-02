@@ -144,3 +144,21 @@ it('sends a photo url set with NotifyMessage::photo()', function () {
     expect($body['photo_url'])->toBe('https://example.com/order.jpg')
         ->and($body['message'])->toBe('<b>Buyurtmangiz tayyor</b>');
 });
+
+it('forwards the selected bot profile through a Laravel notification', function () {
+    $history = [];
+    $client = mockedNotifyClient([
+        jsonResponse(200, tokenResponseBody()),
+        jsonResponse(200, [...sendResponseBody(), 'channel_account_id' => 19]),
+    ], $history);
+    $notification = new class extends Notification
+    {
+        public function toNotify(mixed $notifiable): NotifyMessage
+        {
+            return NotifyMessage::make()->channel('telegram')->channelAccount(19)->message('Hello');
+        }
+    };
+    $response = (new NotifyChannel($client))->send(new NotifiableStub, $notification);
+    expect(json_decode((string) $history[1]['request']->getBody(), true)['channel_account_id'])->toBe(19);
+    expect($response->channelAccountId)->toBe(19);
+});
