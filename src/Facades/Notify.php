@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static \CloudMe\Notify\Templates\TemplatesClient templates()
  * @method static \CloudMe\Notify\Otp\OtpClient otp()
  * @method static \CloudMe\Notify\Debts\DebtsClient debts()
+ * @method static \CloudMe\Notify\ScheduledMessages\ScheduledMessagesClient scheduledMessages()
  *
  * @see NotifyClient
  */

@@ -255,6 +255,44 @@ Notify::debts()->cancel($debtId);    // stop collecting
 
 `recordPayment()` throws `ValidationException` with `errorCode` `EXCEEDS_REMAINING`, `DEBT_CLOSED` or `INVALID_AMOUNT`.
 
+## Scheduled messages
+
+Send a message later - once, or on a recurring timetable - and edit, pause, resume or cancel it, exactly like the dashboard's Scheduled messages page. Requires the `schedules:manage` scope plus the channel's send scope (e.g. `sms:send`).
+
+```php
+use CloudMe\Notify\ScheduledMessages\Recurrence;
+
+// Once
+$schedule = Notify::scheduledMessages()->create(
+    channel: 'sms',
+    startsAt: $appointment->starts_at->subDay(),   // Carbon / DateTimeInterface / ISO 8601 string
+    recipient: $customer->phone,
+    message: "Eslatma: ertaga soat {$appointment->starts_at->format('H:i')} da qabul",
+);
+
+$appointment->update(['notify_schedule_id' => $schedule->id]);
+
+// Recurring - weekly/monthly sends use the time of day of startsAt
+Notify::scheduledMessages()->create(
+    channel: 'telegram',
+    startsAt: now()->next('Monday')->setTime(9, 0),
+    contactGroupId: 12,                            // dashboard -> Contacts -> Groups -> API ID (production only)
+    message: 'Salom, {{name}}! Haftalik yangiliklar...',
+    recurrence: Recurrence::weekly([1, 4]),        // or Recurrence::every(2, 'hours'), Recurrence::monthly([1, 15])
+);
+
+// update() replaces the whole schedule - pass everything again
+Notify::scheduledMessages()->update($scheduleId, channel: 'sms', startsAt: $newTime, recipient: $customer->phone, message: '...');
+
+Notify::scheduledMessages()->pause($scheduleId);
+Notify::scheduledMessages()->resume($scheduleId);  // continues at the next occurrence; missed ones are skipped
+Notify::scheduledMessages()->cancel($scheduleId);
+Notify::scheduledMessages()->find($scheduleId);    // ->status, ->nextRunAt, ->lastError
+Notify::scheduledMessages()->list(status: 'active');
+```
+
+Errors throw `ValidationException` with `errorCode` `SCHEDULE_STATE_INVALID`, `SCHEDULE_START_PASSED`, `TEMPLATE_NOT_FOUND`, `CONTACT_GROUP_NOT_FOUND` or `SANDBOX_GROUP_UNSUPPORTED`. Each send is a normal, billed message (free in sandbox) whose status events reach this API client's webhook.
+
 ## Receiving webhooks
 
 Register a webhook for your API client in the dashboard (API clients -> Webhook) and put its signing secret in `.env`:
